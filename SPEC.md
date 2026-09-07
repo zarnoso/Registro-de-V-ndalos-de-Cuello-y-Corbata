@@ -457,3 +457,15 @@ registro-devandalos/
 **Nota de proceso:** el usuario reportó que la otra IA, trabajando directo en el servidor, había "corregido" `e.get("estado_actual")` a `e.get("estado")` en `backend.py` — pero esa columna ya había sido renombrada a `estado_actual` en el commit `d4354f1` (`SELECT estado AS estado_actual`), así que el cambio de la otra IA habría revertido esa corrección si se aplicó sobre una copia sin el `git pull` más reciente. Se le indicó verificar `git log --oneline -1 -- backend.py` antes de seguir editando ese archivo.
 
 **Pendiente:** aplicar `--apply` en el servidor (autorizado), luego activar el filtro `valida_v2` documentado como TODO en `detalle_politico`.
+
+### 2026-09-03 (7) — Script para poblar familiares desde Wikidata
+
+**Contexto:** `familiares` no tenía ningún pipeline de población automática (a diferencia de casos/noticias) — se llenaba manualmente. No existe un registro público único de "familiares de políticos" en Chile (dato sensible, normalmente sale de investigación periodística), pero Wikidata modela relaciones familiares de forma estructurada (cónyuge, hijos, padres, hermanos) para personas con algo de notoriedad pública.
+
+**`migrations/poblar_familiares_wikidata.py` (nuevo):** por cada político, busca su entidad en Wikidata por nombre (con un chequeo de similitud simple para filtrar matches obviamente equivocados), trae sus claims de familia (P26 cónyuge, P40 hijo, P22 padre, P25 madre, P3373 hermano) y los inserta en `familiares` con `fuente_url` apuntando a la página de Wikidata para verificación manual. Dry-run por defecto; `--apply` para insertar; `--limit N` para probar con pocos registros primero.
+
+**Limitación honesta documentada en el propio script:** Wikidata solo cubre políticos con notoriedad pública nacional/mediática — diputados/senadores menos conocidos o funcionarios de gobierno probablemente no tengan entidad. Esto es un punto de partida, no reemplaza verificación humana; cada fila queda marcada con nota "Importado desde Wikidata, verificar manualmente."
+
+**Siguiente paso sugerido (no implementado aún):** extender `worker_noticias.py` para detectar patrones de parentesco explícito en el texto ya scrapeado ("hijo de", "esposa de", "hermano del senador"), como fuente complementaria para los casos que Wikidata no cubre.
+
+**Bloqueado:** no puedo ejecutar este script yo mismo — mi entorno no tiene acceso de red a `wikidata.org` ni a Neon. Requiere que se corra en el servidor con acceso real.
