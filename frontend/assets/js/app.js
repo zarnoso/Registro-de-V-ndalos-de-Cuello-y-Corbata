@@ -14,9 +14,11 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
 
     let people = [], filtered = [], selectedRegion = null, currentView = "territory", activeFilter = "all", apiAvailable = false;    let casesData = [], filteredCases = [], caseFilters = { estado_procesal: "all", tipo_alerta: "all" };
     let graphPayload = null, somPayload = null, aliasMatches = [], aliasSearchToken = 0, funcionarios = [];
+    let activeSimulation = null;
     const $ = selector => document.querySelector(selector);
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
-    const initials = name => name.split(/\s+/).filter(Boolean).map(x => x[0]).join("").slice(0,2).toUpperCase();
+    const safeHref = url => /^(https?:|mailto:|tel:)/i.test(String(url || "")) ? String(url) : "#";
+    const initials = name => String(name || "").split(/\s+/).filter(Boolean).map(x => x[0]).join("").replace(/[^A-Za-zÁÉÍÓÚÑÜ]/g, "").slice(0,2).toUpperCase();
     const riskGroup = p => p.estado_riesgo === "alerta_roja" ? "formal" : p.estado_riesgo === "alerta_naranja" ? "review" : "clear";
     const riskColor = p => riskGroup(p) === "formal" ? "#b94d4a" : riskGroup(p) === "review" ? "#d18a23" : "#087f73";
     const svgEl = (name, attrs={}) => {
@@ -86,14 +88,24 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
 
     function applyFilters() {
       const q = $("#searchInput").value.trim().toLowerCase();
+      if (currentView === "funcionarios") {
+        const personList = $("#personList");
+        if (personList) personList.innerHTML = "";
+        renderFuncionariosList(q);
+        return;
+      }
+      if (currentView === "cases") {
+        renderCasesIntoResults();
+        return;
+      }
       filtered = people.filter(p => {
         const haystack = `${p.nombre_completo} ${p.partido} ${p.region} ${p.cargo}`.toLowerCase();
         return (!q || haystack.includes(q))
           && (!selectedRegion || p.region === selectedRegion)
           && (activeFilter === "all" || riskGroup(p) === activeFilter);
       });
-      if (currentView === "cases") {
-        renderCasesIntoResults();
+      if (currentView === "network" || currentView === "som") {
+        renderViz();
         return;
       }
       renderList();
@@ -156,11 +168,11 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
       const isFuncView = currentView === "funcionarios";
       $("#viz").hidden = isFuncView;
       if (funcList) funcList.hidden = !isFuncView;
-      if (isFuncView) { renderFuncionariosList(); return; }
+      if (isFuncView) { renderFuncionariosList($("#searchInput").value); return; }
       svg.replaceChildren();
       if (currentView === "territory") renderTerritory(svg);
-      if (currentView === "network") renderNetwork(svg);
-      if (currentView === "som") renderSom(svg);
+      if (currentView === "network") { renderNetwork(svg); renderList(); }
+      if (currentView === "som") { renderSom(svg); renderList(); }
     }
 
     function renderCasesIntoResults() {
@@ -199,7 +211,7 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
               <div class="detail-stat"><b>${escapeHtml(c.estado||"—")}</b><span>Estado</span></div>
               <div class="detail-stat"><b>${escapeHtml(c.responsable||"—")}</b><span>Responsable(s)</span></div>
               <div class="detail-stat"><b>${escapeHtml(c.monto||"—")}</b><span>Monto</span></div>
-              ${c.fuente_url?`<div class="detail-stat"><b><a href="${escapeHtml(c.fuente_url)}" target="_blank" style="color:var(--teal)">Fuente</a></b><span>Documento</span></div>`:""}
+              ${c.fuente_url?`<div class="detail-stat"><b><a href="${escapeHtml(safeHref(c.fuente_url))}" target="_blank" style="color:var(--teal)">Fuente</a></b><span>Documento</span></div>`:""}
             </div></section>
             ${c.delitos?`<section class="detail-section"><h3>Delitos imputados</h3><div class="delitos-tags">${c.delitos.split(",").map(d=>`<span class="delito-tag">${escapeHtml(d.trim())}</span>`).join("")}</div></section>`:""}
             <p style="color:var(--muted);font-size:11px;margin-top:14px">Código de caso ${escapeHtml(c.id)} · Fuente base de corrupción Chile compilada públicamente.</p>`;
@@ -208,13 +220,19 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
         }));
     }
 
-    function renderFuncionariosList() {
+    function renderFuncionariosList(q) {
       const list = $("#funcionariosList");
-      if (!funcionarios || !funcionarios.length) {
-        list.innerHTML = '<div class="empty">Sin funcionarios registrados</div>';
+      const query = (q || "").trim().toLowerCase();
+      let rows = funcionarios || [];
+      if (query) {
+        rows = rows.filter(f =>
+          `${f.nombre_completo||""} ${f.cargo||""} ${f.institucion||""} ${f.dependencia_jerarquica||""}`.toLowerCase().includes(query));
+      }
+      if (!rows.length) {
+        list.innerHTML = `<div class="empty">${funcionarios && funcionarios.length ? "Sin funcionarios con esos criterios." : "Sin funcionarios registrados"}</div>`;
         return;
       }
-      list.innerHTML = funcionarios.map(f => `
+      list.innerHTML = rows.map(f => `
         <button class="person person-funcionario" data-funcionario="${f.id}">
           <span class="avatar" style="background:#315aa8">${escapeHtml(initials(f.nombre_completo))}</span>
           <span>
@@ -261,7 +279,7 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
               <strong>${escapeHtml(fam.nombre_completo)}</strong>
               <p>${escapeHtml(fam.parentesco || "—")}</p>
             </article>`).join("")}</section>` : ''}
-          ${f.fuente_url ? `<p style="margin-top:24px;font-size:12px;color:var(--muted)">Fuente: <a href="${escapeHtml(f.fuente_url)}" target="_blank" style="color:var(--teal)">${escapeHtml(f.fuente_url)}</a></p>` : ''}
+          ${f.fuente_url ? `<p style="margin-top:24px;font-size:12px;color:var(--muted)">Fuente: <a href="${escapeHtml(safeHref(f.fuente_url))}" target="_blank" style="color:var(--teal)">${escapeHtml(f.fuente_url)}</a></p>` : ''}
         `;
         $("#drawerBackdrop").classList.add("open");
         $("#drawerClose").focus();
@@ -405,11 +423,13 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
         .map(e => ({ source: e.origen, target: e.destino, tipo: e.tipo }));
       
       // Force simulation
+      if (activeSimulation) activeSimulation.stop();
       const simulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(edges).id(d => d.id).distance(80).strength(0.5))
         .force('charge', d3.forceManyBody().strength(-200))
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide().radius(d => d.radius + 5));
+      activeSimulation = simulation;
       
       // Dibujar aristas — vínculos mediáticos (mención conjunta, sin confirmar)
       // se ven punteados y tenues; verificados (familiar, negocios, etc.) sólidos.
@@ -650,30 +670,15 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
       }
     }
 
-    function eventProcessState(value) {
-      const normalized = String(value || "").toLowerCase();
-      if (["absuelto","sobreseido","archivado"].includes(normalized)) return "cerrado_sin_condena";
-      if (["en_revisión","investigado","formalizado"].includes(normalized)) return "abierto";
-      if (normalized === "condenado") return "condenado";
-      return "sin_estado";
-    }
-
-    function processStateClass(value) {
-      const normalized = String(value || "").toLowerCase();
-      if (normalized === "condenado") return "convicted";
-      if (normalized === "cerrado_sin_condena") return "closed";
-      return "open";
-    }
-
     const avatarHtml = (p, size) => {
       const s = size || 64;
-      if (p.foto_url) return `<img src="${escapeHtml(p.foto_url)}" alt="${escapeHtml(p.nombre_completo)}" style="width:${s}px;height:${s}px;border-radius:50%;object-fit:cover;border:2px solid var(--teal)" onerror="this.outerHTML='<span class=\\'avatar-fallback\\' style=\\'width:${s}px;height:${s}px\\'>${initials(p.nombre_completo)}</span>'">`;
-      return `<span class="avatar-fallback" style="width:${s}px;height:${s}px">${initials(p.nombre_completo)}</span>`;
+      if (p.foto_url) return `<img src="${escapeHtml(p.foto_url)}" alt="${escapeHtml(p.nombre_completo)}" style="width:${s}px;height:${s}px;border-radius:50%;object-fit:cover;border:2px solid var(--teal)" onerror="this.outerHTML='<span class=\\'avatar-fallback\\' style=\\'width:${s}px;height:${s}px\\'>${escapeHtml(initials(p.nombre_completo))}</span>'">`;
+      return `<span class="avatar-fallback" style="width:${s}px;height:${s}px">${escapeHtml(initials(p.nombre_completo))}</span>`;
     };
 
     async function openProfile(id) {
-      // #13: Actualizar URL hash para perfil individual
-      if (id) {
+      // #13: Actualizar URL hash para perfil individual (evita apilar historial innecesario)
+      if (id && window.location.hash !== `#perfil/${id}`) {
         history.pushState(null, '', `#perfil/${id}`);
       }
       let p=people.find(x=>x.id===String(id));
@@ -718,7 +723,7 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
           <div class="timeline-container" id="timelineContainer">
             ${events.length > 1 ? `
               <div class="timeline-track"></div>
-              ${events.sort((a,b) => (parseInt(a.fecha_inicio) || 9999) - (parseInt(b.fecha_inicio) || 9999)).map((e, idx, arr) => {
+              ${[...events].sort((a,b) => (parseInt(a.fecha_inicio) || 9999) - (parseInt(b.fecha_inicio) || 9999)).map((e, idx, arr) => {
                 const state = e.estado_normalizado === "cerrado_sin_condena" ? "closed" : e.estado_normalizado === "abierto" ? "open" : e.estado_normalizado === "condenado" ? "convicted" : "no-date";
                 const title = e.caso_nombre || "Caso sin nombre";
                 const year = e.fecha_inicio || "—";
@@ -740,7 +745,7 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
             <article class="event">
               <time>${escapeHtml(n.fecha_publicacion || "—")}</time>
               <strong>${escapeHtml(n.titulo)}</strong>
-              <p>🔗 <a href="${escapeHtml(n.url)}" target="_blank" style="color:var(--teal)">Ver en ${escapeHtml(n.fuente)}</a></p>
+              <p>🔗 <a href="${escapeHtml(safeHref(n.url))}" target="_blank" style="color:var(--teal)">Ver en ${escapeHtml(n.fuente)}</a></p>
               <p>📰 Fuente: ${escapeHtml(n.fuente)}</p>
             </article>`).join("") : `<div class="empty">Sin noticias registradas.</div>`}
         </section>
@@ -772,15 +777,19 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
       $("#viewNote").innerHTML=`<strong>Cómo leer esta vista</strong>${escapeHtml(v.note)}`;
       $("#panelTitle").textContent=v.panel; $("#panelEyebrow").textContent=v.panelEye; $("#vizHint").textContent=v.hint;
       const vizPanel = $("#viz");
+      const funcList = $("#funcionariosList");
       const caseFilterEl = $("#caseStateFilter");
-      if (currentView === "cases") {
+      const peopleFilters = $("#filters");
+      if (currentView === "cases" || currentView === "funcionarios") {
         vizPanel.hidden = true;
-        if (caseFilterEl) caseFilterEl.hidden = false;
-        $("#filters").hidden = true;
+        if (funcList) funcList.hidden = currentView !== "funcionarios";
+        if (caseFilterEl) caseFilterEl.hidden = currentView !== "cases";
+        if (peopleFilters) peopleFilters.hidden = currentView !== "cases";
       } else {
         if (vizPanel.hidden) vizPanel.hidden = false;
+        if (funcList) funcList.hidden = true;
         if (caseFilterEl) caseFilterEl.hidden = true;
-        $("#filters").hidden = false;
+        if (peopleFilters) peopleFilters.hidden = false;
       }
       applyFilters();
     }));
@@ -791,7 +800,11 @@ const _isLocal = location.hostname === "localhost" || location.hostname === "127
       caseFilters.estado_procesal = e.target.value;
       applyFilters();
     });
-    $("#searchInput").addEventListener("input",applyFilters);
+    let searchTimer;
+    $("#searchInput").addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(applyFilters, 200);
+    });
     document.addEventListener("click",e=>{
       if(!e.target.closest(".search")) { const box=$("#aliasHint"); if(box) box.hidden = true; }
     });

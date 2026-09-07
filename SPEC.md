@@ -469,3 +469,30 @@ registro-devandalos/
 **Siguiente paso sugerido (no implementado aún):** extender `worker_noticias.py` para detectar patrones de parentesco explícito en el texto ya scrapeado ("hijo de", "esposa de", "hermano del senador"), como fuente complementaria para los casos que Wikidata no cubre.
 
 **Bloqueado:** no puedo ejecutar este script yo mismo — mi entorno no tiene acceso de red a `wikidata.org` ni a Neon. Requiere que se corra en el servidor con acceso real.
+
+### 2026-09-04 — Auditoría integral pos-fix + terminología "Sin antecedentes" + patrimonio en pausa
+
+**Auditoría integral (subagente)** de `backend.py` y `frontend/assets/js/app.js`, con todos los hallazgos corregidos:
+
+**Backend (`backend.py`):**
+- `grafo()`: `try/finally` (cierre de conexión), matching de casos por nombre, filtro de edges a `politico_ids` relevantes.
+- `som()`: join `casos_familiares` corregido a `cc2.responsable ILIKE '%f.nombre_completo%'`; conteo de casos por nombre en `som()`/`grafo`/`comparar`/`mapa_regiones`.
+- `cache_get`: purga entradas vencidas.
+- Nuevo helper `bound_params(limit, skip)` (MAX_LIMIT=1000) aplicado a `listar_politicos`, `grafo`, `som`, `casos`, `noticias`, `listar_funcionarios`, `conexiones_no_declaradas`.
+- `listar_funcionarios`: total count refleja el filtro de institución.
+- `buscar_por_alias`: LIMIT.
+- `clear_cache` requiere header `X-Admin-Token` (cuando `API_ADMIN_TOKEN` está definido).
+- Eliminada línea muerta `if False else None` en `detalle_politico`.
+
+**Frontend (`frontend/assets/js/app.js`):**
+- `applyFilters` y `renderFuncionariosList(q)` ahora manejan la vista de funcionarios (filtran por búsqueda).
+- `renderViz` pasa query; nav muestra/oculta `#viz`, `#funcionariosList`, `#caseStateFilter`, `#filters`.
+- Nuevo helper `safeHref` (solo `http(s)|mailto|tel:`) aplicado a los 3 enlaces (caso fuente, funcionario fuente, noticia url).
+- `initials()` saneado a letras; `escapeHtml(initials(...))` en `avatarHtml`.
+- Búsqueda con debounce (200ms); `history.pushState` sin apilar mismo hash; `[...events].sort()` sin mutar; `activeSim.stop()` + reasignación para la simulación d3 force; funciones muertas eliminadas.
+
+**Terminología (usuario: "el sin estado, dejarlo sin antecedentes"):** en `frontend/index.html`, chip `clear` y leyenda pasan de "sin registros" a "sin antecedentes"; opción del selector de casos `sin_estado` pasa a "Sin antecedentes". `formatProcessState` ya devolvía "Sin antecedentes" para `sin_estado`. La "Guía rápida" negra se mantiene como categorías de **riesgo** (Con casos propios / Entorno comprometido / Mencionado junto a otro caso / Sin antecedentes), concepto distinto al estado procesal del filtro.
+
+**Verificación:** 10 endpoints probados devuelven 200 (`/api/politicos/`, `/api/casos/`, `/api/politicos/analitica/som`, `/api/politicos/grafo`, `/api/funcionarios/`, `/api/politicos/1115`, stats). `py_compile` backend OK; `node --check` frontend OK. Backend reiniciado en el servidor.
+
+**Patrimonio — en pausa (bloqueado por la fuente):** la tabla `patrimonio` sigue vacía (0 filas). Al revisar la fuente, las 2,790 filas de `bienes_infoprobidad` vinculadas a 74 políticos NO tienen datos estructurados (`tipo`/`descripcion`/`valor` todos NULL; direcciones "RESERVADO"). Un backfill ahora insertaría solo filas vacías/engañosas y haría `num_empresas`/patrimonio confusos. Decisión del usuario: **diferir hasta un re-scrape** de infoprobidad que capture los bienes declarados. Documentado en `ROADMAP.md` (#3b).

@@ -87,7 +87,7 @@
             <div><span class="eyebrow" id="panelEyebrow">Chile longitudinal</span><h2 id="panelTitle">Autoridades por territorio</h2></div>
             <div class="panel-actions" id="filters">
               <button class="chip active" data-filter="all">Todas</button>
-              <button class="chip" data-filter="clear">Sin registros</button>
+              <button class="chip" data-filter="clear">Sin antecedentes</button>
               <button class="chip" data-filter="review">En revisión</button>
               <button class="chip" data-filter="formal">Formalización</button>
             </div>
@@ -96,13 +96,13 @@
               <option value="condenado">Condenado</option>
               <option value="abierto">En investigación / activo</option>
               <option value="cerrado_sin_condena">Cerrado sin condena</option>
-              <option value="sin_estado">Sin estado registrado</option>
+              <option value="sin_estado">Sin antecedentes</option>
             </select>
           </div>
           <div class="viz" id="viz" role="img" aria-label="Visualización interactiva">
             <svg id="vizSvg" viewBox="0 0 800 500"></svg>
             <div class="hint" id="vizHint">Pasa el cursor sobre una región y selecciónala para filtrar la lista.</div>
-            <div class="legend"><span><i style="background:#087f73"></i>sin registros</span><span><i style="background:#d18a23"></i>en revisión</span><span><i style="background:#b94d4a"></i>formalizado</span></div>
+            <div class="legend"><span><i style="background:#087f73"></i>sin antecedentes</span><span><i style="background:#d18a23"></i>en revisión</span><span><i style="background:#b94d4a"></i>formalizado</span></div>
           </div>
           <div class="viz funcionarios-list" id="funcionariosList" hidden></div>
         </div>

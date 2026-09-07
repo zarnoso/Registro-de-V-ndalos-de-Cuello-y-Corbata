@@ -47,6 +47,7 @@ scraping_jobs, comunas_chile, api.mapata.cl) mezclado por error. Se limpió el
 | 1 | ✅ Poblar `relaciones` con datos reales | completado 2026-09-03 — 7,809 filas (mención conjunta en noticias, tipo `mediatico`) | — |
 | 2 | ✅ Poblar `noticias_menciones` | completado 2026-09-03 — 3,670 filas, vía `worker_noticias.py`; auditoría de falsos positivos pendiente (`migrations/audit_noticias_menciones.py --apply`) | requiere correr el script en el servidor con acceso a Neon |
 | 3 | Migrar el resto de `casos_corrupcion` a FK real | avanzó 15→90/128 (70%) el 2026-09-03; quedan 22 sin resolver por nombre no encontrado en `politicos` (revisar manualmente) | ninguno, es revisión de datos |
+| 3b | Re-scrape de infoprobidad para `patrimonio` | la tabla `patrimonio` sigue vacía y el backfill quedó en pausa el 2026-09-04: las 2,790 filas de `bienes_infoprobidad` vinculadas a 74 políticos NO traen datos estructurados (`tipo`/`descripcion`/`valor` todos NULL, direcciones "RESERVADO"). Un backfill ahora insertaría solo filas vacías/engañosas. Requiere un re-scrape que capture los bienes declarados. | requiere scraping de infoprobidad |
 | 17 | Poblar `familiares` desde Wikidata | script listo (`migrations/poblar_familiares_wikidata.py`), pendiente correr en servidor con acceso a Wikidata + Neon | requiere acceso de red que este entorno no tiene |
 | 4 | ✅ Hero explicativo en la portada | ya existía, sin cambios | — |
 | 5 | ✅ Glosario ("Guía rápida") | completado 2026-09-03 — 4 tarjetas con la paleta de color real del sitio | — |
